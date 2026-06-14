@@ -1,26 +1,59 @@
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/inventory_item.dart';
+
+// Mobile imports
+import 'package:sqflite/sqflite.dart' as sqflite;
+import 'package:path/path.dart' as path_helper;
+
+// Web imports
+import 'package:sembast/sembast.dart' as sembast;
+import 'package:sembast_web/sembast_web.dart' as sembast_web;
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
-  static Database? _database;
+
+  // Mobile database
+  static sqflite.Database? _mobileDb;
+
+  // Web database
+  static sembast.Database? _webDb;
+
+  // Web stores (equivalent to tables)
+  final _productsStore = sembast.stringMapStoreFactory.store('products');
+  final _salesStore = sembast.stringMapStoreFactory.store('sales');
+  final _settingsStore = sembast.stringMapStoreFactory.store('settings');
 
   DatabaseHelper._init();
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDB('retail_engine.db');
-    return _database!;
+  // ── INIT ────────────────────────────────────────────────────────────────
+
+  Future<void> init() async {
+    if (kIsWeb) {
+      await _initWeb();
+    } else {
+      await _initMobile();
+    }
   }
 
-  Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+  Future<void> _initWeb() async {
+    if (_webDb != null) return;
+    _webDb = await sembast_web.databaseFactoryWeb.openDatabase(
+      'retail_engine.db',
+    );
   }
 
-  Future _createDB(Database db, int version) async {
+  Future<void> _initMobile() async {
+    if (_mobileDb != null) return;
+    final dbPath = await sqflite.getDatabasesPath();
+    final fullPath = path_helper.join(dbPath, 'retail_engine.db');
+    _mobileDb = await sqflite.openDatabase(
+      fullPath,
+      version: 1,
+      onCreate: _createMobileDB,
+    );
+  }
+
+  Future<void> _createMobileDB(sqflite.Database db, int version) async {
     await db.execute('''
       CREATE TABLE products (
         id TEXT PRIMARY KEY,
@@ -57,72 +90,150 @@ class DatabaseHelper {
     ''');
   }
 
-  // ── PRODUCTS ──────────────────────────────────────────────────────────────
+  // ── Getters ──────────────────────────────────────────────────────────────
 
-  Future<void> saveAllProducts() async {
-    final db = await database;
-    final batch = db.batch();
-    for (var item in globalInventory) {
-      batch.insert(
-        'products',
-        item.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-    await batch.commit(noResult: true);
+  Future<sqflite.Database> get _mobile async {
+    if (_mobileDb == null) await _initMobile();
+    return _mobileDb!;
   }
 
-  Future<void> saveProduct(InventoryItem item) async {
-    final db = await database;
-    await db.insert(
-      'products',
-      item.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+  Future<sembast.Database> get _web async {
+    if (_webDb == null) await _initWeb();
+    return _webDb!;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PRODUCTS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Future<void> insertProduct(InventoryItem item) async {
+    if (kIsWeb) {
+      await _productsStore
+          .record(item.id)
+          .put(await _web, item.toMap().cast<String, Object?>());
+    } else {
+      final db = await _mobile;
+      await db.insert(
+        'products',
+        item.toMap(),
+        conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
+      );
+    }
+  }
+
+  Future<void> updateProduct(InventoryItem item) async {
+    if (kIsWeb) {
+      await _productsStore
+          .record(item.id)
+          .put(await _web, item.toMap().cast<String, Object?>());
+    } else {
+      final db = await _mobile;
+      await db.update(
+        'products',
+        item.toMap(),
+        where: 'id = ?',
+        whereArgs: [item.id],
+      );
+    }
   }
 
   Future<void> deleteProduct(String id) async {
-    final db = await database;
-    await db.delete('products', where: 'id = ?', whereArgs: [id]);
+    if (kIsWeb) {
+      await _productsStore.record(id).delete(await _web);
+    } else {
+      final db = await _mobile;
+      await db.delete('products', where: 'id = ?', whereArgs: [id]);
+    }
   }
 
-  Future<List<InventoryItem>> loadProducts() async {
-    final db = await database;
-    final maps = await db.query('products', orderBy: 'dateAdded DESC');
-    return maps.map((m) => InventoryItem.fromMap(m)).toList();
+  Future<List<InventoryItem>> getAllProducts() async {
+    if (kIsWeb) {
+      final snapshots = await _productsStore.find(
+        await _web,
+        finder: sembast.Finder(
+          sortOrders: [sembast.SortOrder('dateAdded', false)],
+        ),
+      );
+      return snapshots
+          .map((s) => InventoryItem.fromMap(Map<String, dynamic>.from(s.value)))
+          .toList();
+    } else {
+      final db = await _mobile;
+      final maps = await db.query('products', orderBy: 'dateAdded DESC');
+      return maps.map((m) => InventoryItem.fromMap(m)).toList();
+    }
   }
 
-  // ── SALES ─────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // SALES
+  // ══════════════════════════════════════════════════════════════════════════
 
-  Future<void> saveSale(SaleRecord sale) async {
-    final db = await database;
-    await db.insert(
-      'sales',
-      sale.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+  Future<void> insertSale(SaleRecord sale) async {
+    if (kIsWeb) {
+      await _salesStore
+          .record(sale.id)
+          .put(await _web, sale.toMap().cast<String, Object?>());
+    } else {
+      final db = await _mobile;
+      await db.insert(
+        'sales',
+        sale.toMap(),
+        conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
+      );
+    }
   }
 
-  Future<List<SaleRecord>> loadSales() async {
-    final db = await database;
-    final maps = await db.query('sales', orderBy: 'saleDate DESC');
-    return maps.map((m) => SaleRecord.fromMap(m)).toList();
+  Future<List<SaleRecord>> getAllSales() async {
+    if (kIsWeb) {
+      final snapshots = await _salesStore.find(
+        await _web,
+        finder: sembast.Finder(
+          sortOrders: [sembast.SortOrder('saleDate', false)],
+        ),
+      );
+      return snapshots
+          .map((s) => SaleRecord.fromMap(Map<String, dynamic>.from(s.value)))
+          .toList();
+    } else {
+      final db = await _mobile;
+      final maps = await db.query('sales', orderBy: 'saleDate DESC');
+      return maps.map((m) => SaleRecord.fromMap(m)).toList();
+    }
   }
 
-  // ── SETTINGS ──────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // SETTINGS
+  // ══════════════════════════════════════════════════════════════════════════
 
   Future<void> saveSetting(String key, String value) async {
-    final db = await database;
-    await db.insert('settings', {
-      'key': key,
-      'value': value,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    if (kIsWeb) {
+      await _settingsStore.record(key).put(await _web, {
+        'key': key,
+        'value': value,
+      });
+    } else {
+      final db = await _mobile;
+      await db.insert('settings', {
+        'key': key,
+        'value': value,
+      }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
+    }
   }
 
   Future<String?> getSetting(String key) async {
-    final db = await database;
-    final maps = await db.query('settings', where: 'key = ?', whereArgs: [key]);
-    if (maps.isEmpty) return null;
-    return maps.first['value'] as String?;
+    if (kIsWeb) {
+      final record = await _settingsStore.record(key).get(await _web);
+      if (record == null) return null;
+      return record['value'] as String?;
+    } else {
+      final db = await _mobile;
+      final maps = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: [key],
+      );
+      if (maps.isEmpty) return null;
+      return maps.first['value'] as String?;
+    }
   }
 }

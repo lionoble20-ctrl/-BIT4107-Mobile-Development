@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/inventory_item.dart';
+import '../services/database_helper.dart';
 
 class InventoryFormScreen extends StatefulWidget {
   const InventoryFormScreen({super.key});
@@ -70,13 +71,16 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                     child: const Icon(Icons.delete, color: Colors.white),
                   ),
                   confirmDismiss: (_) => _confirmDelete(context, item.name),
-                  onDismissed: (_) {
+                  onDismissed: (_) async {
+                    await DatabaseHelper.instance.deleteProduct(item.id);
                     setState(() {
                       globalInventory.removeWhere((x) => x.id == item.id);
                     });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${item.name} deleted')),
-                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${item.name} deleted')),
+                      );
+                    }
                   },
                   child: Card(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -264,7 +268,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 _nameCtrl,
                 'Item Name',
                 Icons.label_outline,
-                hint: 'e.g. Samsung TV, White Sugar 2kg, Ladies Dress',
+                hint: 'e.g. Samsung TV, Sugar 2kg, Ladies Dress',
               ),
               const SizedBox(height: 14),
               _field(
@@ -363,11 +367,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           ? const Color(0xFF22C55E)
                           : Colors.red,
                     ),
-                    _calcRow(
-                      'Breakeven Units',
-                      '${_margin > 0 ? (double.tryParse(_costCtrl.text) ?? 0) ~/ (_margin / 100 * (double.tryParse(_costCtrl.text) ?? 1)) : "N/A"} units',
-                      Colors.grey,
-                    ),
                   ],
                 ),
               ),
@@ -461,10 +460,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       lastSaleDate: widget.existing?.lastSaleDate,
     );
 
+    // Save to SQLite database
     if (widget.existing != null) {
+      await DatabaseHelper.instance.updateProduct(item);
       final idx = globalInventory.indexWhere((i) => i.id == item.id);
       if (idx != -1) globalInventory[idx] = item;
     } else {
+      await DatabaseHelper.instance.insertProduct(item);
       globalInventory.insert(0, item);
     }
 
@@ -473,8 +475,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         SnackBar(
           content: Text(
             widget.existing != null
-                ? '${item.name} updated successfully'
-                : '${item.name} added to inventory',
+                ? '${item.name} updated and saved'
+                : '${item.name} added and saved to database',
           ),
           backgroundColor: const Color(0xFF22C55E),
         ),

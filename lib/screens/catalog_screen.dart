@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/inventory_item.dart';
+import '../services/database_helper.dart';
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
@@ -48,7 +49,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
       ),
       body: Column(
         children: [
-          // Search bar
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: TextField(
@@ -62,7 +62,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
               ),
             ),
           ),
-          // Category filter chips
           if (categories.length > 1)
             SizedBox(
               height: 44,
@@ -104,7 +103,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 },
               ),
             ),
-          // Grid
           Expanded(
             child: filtered.isEmpty
                 ? _emptyState(globalInventory.isEmpty)
@@ -188,7 +186,6 @@ class _ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Category chip
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
@@ -323,18 +320,36 @@ class _ProductCard extends StatelessWidget {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
-                recordSale(item, qty);
-                onUpdate();
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Sale recorded: $qty ${item.unit} of ${item.name}',
-                    ),
-                    backgroundColor: const Color(0xFF22C55E),
-                  ),
+              onPressed: () async {
+                // Save sale to SQLite
+                final sale = SaleRecord(
+                  id: generateId(),
+                  productId: item.id,
+                  productName: item.name,
+                  quantitySold: qty,
+                  saleDate: DateTime.now(),
+                  totalRevenue: item.sellingPrice * qty,
+                  totalCost: item.costPrice * qty,
+                  profit: item.profitMargin * qty,
                 );
+                item.stockQty -= qty;
+                item.unitsSold += qty;
+                item.lastSaleDate = DateTime.now();
+                await DatabaseHelper.instance.updateProduct(item);
+                await DatabaseHelper.instance.insertSale(sale);
+                globalSales.insert(0, sale);
+                onUpdate();
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Sale saved: $qty ${item.unit} of ${item.name}',
+                      ),
+                      backgroundColor: const Color(0xFF22C55E),
+                    ),
+                  );
+                }
               },
               child: const Text('Confirm Sale'),
             ),

@@ -3,19 +3,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models/inventory_item.dart';
 import 'screens/auth_screen.dart';
 import 'screens/setup_wizard.dart';
+import 'services/database_helper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await _loadSettings();
-  runApp(const IntelligentRetailApp());
-}
+  await DatabaseHelper.instance.init();
 
-Future<void> _loadSettings() async {
+  // Load all data from SQLite database on startup
+  globalInventory = await DatabaseHelper.instance.getAllProducts();
+  globalSales = await DatabaseHelper.instance.getAllSales();
+
+  // Load settings from SharedPreferences
   final prefs = await SharedPreferences.getInstance();
   globalSettings.businessName = prefs.getString('businessName') ?? '';
   globalSettings.businessType = prefs.getString('businessType') ?? '';
   globalSettings.currency = prefs.getString('currency') ?? 'KES';
   globalSettings.setupComplete = prefs.getBool('setupComplete') ?? false;
+
+  runApp(const IntelligentRetailApp());
 }
 
 class IntelligentRetailApp extends StatelessWidget {
