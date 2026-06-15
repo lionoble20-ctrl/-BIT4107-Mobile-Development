@@ -3,6 +3,7 @@ import 'catalog_screen.dart';
 import 'inventory_form.dart';
 import 'analytics_dashboard.dart';
 import 'advisory_screen.dart';
+import 'currency_screen.dart'; // ADD THIS
 
 class MainNavigationContainer extends StatefulWidget {
   const MainNavigationContainer({super.key});
@@ -20,6 +21,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     InventoryFormScreen(),
     AnalyticsDashboardScreen(),
     PredictiveAdvisoryScreen(),
+    CurrencyScreen(), // ADD THIS
   ];
 
   @override
@@ -49,6 +51,11 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
           BottomNavigationBarItem(
             icon: Icon(Icons.psychology),
             label: 'Advisory Eng.',
+          ),
+          // ADD THIS
+          BottomNavigationBarItem(
+            icon: Icon(Icons.currency_exchange),
+            label: 'Rates',
           ),
         ],
       ),

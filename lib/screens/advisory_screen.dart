@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/inventory_item.dart';
+import '../services/world_bank_service.dart'; // NEW
 
 class PredictiveAdvisoryScreen extends StatefulWidget {
   const PredictiveAdvisoryScreen({super.key});
@@ -13,6 +14,29 @@ class _PredictiveAdvisoryScreenState extends State<PredictiveAdvisoryScreen> {
   final _questionCtrl = TextEditingController();
   String _answer = '';
   bool _showAnswer = false;
+  WorldBankData? _worldBankData; // NEW
+  bool _loadingWB = true; // NEW
+
+  @override
+  void initState() {
+    // NEW
+    super.initState();
+    _loadWorldBankData();
+  }
+
+  Future<void> _loadWorldBankData() async {
+    // NEW
+    try {
+      final data = await WorldBankService.getKenyaData();
+      if (mounted)
+        setState(() {
+          _worldBankData = data;
+          _loadingWB = false;
+        });
+    } catch (e) {
+      if (mounted) setState(() => _loadingWB = false);
+    }
+  }
 
   double get _confidenceLevel {
     if (globalInventory.isEmpty) return 0;
@@ -79,7 +103,11 @@ class _PredictiveAdvisoryScreenState extends State<PredictiveAdvisoryScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+
+          // NEW — World Bank Advisory Card
+          _worldBankAdvisoryCard(),
+          const SizedBox(height: 16),
 
           // Q&A section
           const Text(
@@ -185,6 +213,153 @@ class _PredictiveAdvisoryScreenState extends State<PredictiveAdvisoryScreen> {
           ),
           const SizedBox(height: 8),
           ...suggestions.map((s) => _SuggestionCard(data: s)).toList(),
+        ],
+      ),
+    );
+  }
+
+  // NEW — World Bank Advisory Widget
+  Widget _worldBankAdvisoryCard() {
+    if (_loadingWB) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.blueAccent.withAlpha(80)),
+        ),
+        child: const Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Text(
+              'Loading Kenya economic data...',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_worldBankData == null) return const SizedBox();
+
+    final inflation = _worldBankData!.inflationRate;
+    final gdp = _worldBankData!.gdpGrowth;
+
+    // Generate advice based on economic data
+    final List<Map<String, dynamic>> economicAdvice = [];
+
+    if (inflation > 7) {
+      economicAdvice.add({
+        'icon': Icons.warning_amber,
+        'color': Colors.red,
+        'advice':
+            'High inflation at ${inflation.toStringAsFixed(1)}% — raise your prices immediately to protect margins.',
+      });
+    } else if (inflation > 4) {
+      economicAdvice.add({
+        'icon': Icons.info_outline,
+        'color': Colors.orange,
+        'advice':
+            'Moderate inflation at ${inflation.toStringAsFixed(1)}% — review prices every 3 months to stay ahead.',
+      });
+    } else {
+      economicAdvice.add({
+        'icon': Icons.check_circle,
+        'color': const Color(0xFF22C55E),
+        'advice':
+            'Low inflation at ${inflation.toStringAsFixed(1)}% — stable pricing environment, good time to grow.',
+      });
+    }
+
+    if (gdp > 5) {
+      economicAdvice.add({
+        'icon': Icons.trending_up,
+        'color': const Color(0xFF22C55E),
+        'advice':
+            'Strong GDP growth at ${gdp.toStringAsFixed(1)}% — consumer spending is rising, expand your stock now.',
+      });
+    } else if (gdp > 3) {
+      economicAdvice.add({
+        'icon': Icons.trending_flat,
+        'color': Colors.orange,
+        'advice':
+            'Moderate GDP growth at ${gdp.toStringAsFixed(1)}% — economy is stable, focus on high-margin products.',
+      });
+    } else {
+      economicAdvice.add({
+        'icon': Icons.trending_down,
+        'color': Colors.red,
+        'advice':
+            'Slow GDP growth at ${gdp.toStringAsFixed(1)}% — consumers spending less, cut slow-moving stock.',
+      });
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.blueAccent.withAlpha(80)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.public, color: Colors.blueAccent, size: 18),
+              SizedBox(width: 8),
+              Text(
+                '🌍 Kenya Market Intelligence',
+                style: TextStyle(
+                  color: Colors.blueAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Live advice based on World Bank economic data',
+            style: TextStyle(color: Colors.grey, fontSize: 11),
+          ),
+          const Divider(height: 16, color: Colors.white12),
+          ...economicAdvice.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    item['icon'] as IconData,
+                    color: item['color'] as Color,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      item['advice'] as String,
+                      style: TextStyle(
+                        color: item['color'] as Color,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 8, color: Colors.white12),
+          Text(
+            'Source: World Bank Open Data — Kenya 2024',
+            style: TextStyle(color: Colors.grey[600], fontSize: 10),
+          ),
         ],
       ),
     );

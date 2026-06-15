@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/inventory_item.dart';
+import '../services/world_bank_service.dart'; // LINE 4 — NEW
 
 class AnalyticsDashboardScreen extends StatefulWidget {
   const AnalyticsDashboardScreen({super.key});
@@ -13,6 +14,29 @@ class AnalyticsDashboardScreen extends StatefulWidget {
 class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
   String _selectedPeriod = 'Monthly';
   final List<String> _periods = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
+  WorldBankData? _worldBankData; // NEW
+  bool _loadingWB = true; // NEW
+
+  @override
+  void initState() {
+    // NEW
+    super.initState();
+    _loadWorldBankData();
+  }
+
+  Future<void> _loadWorldBankData() async {
+    // NEW
+    try {
+      final data = await WorldBankService.getKenyaData();
+      if (mounted)
+        setState(() {
+          _worldBankData = data;
+          _loadingWB = false;
+        });
+    } catch (e) {
+      if (mounted) setState(() => _loadingWB = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +101,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                       : Icons.trending_down,
                 ),
                 const SizedBox(height: 12),
+                _worldBankCard(pnl), // NEW — World Bank card here
+                const SizedBox(height: 12), // NEW
                 Row(
                   children: [
                     Expanded(
@@ -247,6 +273,125 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                   ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // NEW — World Bank card widget
+  Widget _worldBankCard(PnLSummary pnl) {
+    if (_loadingWB) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_worldBankData == null) return const SizedBox();
+
+    final inflation = _worldBankData!.inflationRate;
+    final gdp = _worldBankData!.gdpGrowth;
+    final margin = pnl.realizedMargin;
+    final beatsInflation = margin > inflation;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.blueAccent.withAlpha(80)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.public, color: Colors.blueAccent, size: 18),
+              SizedBox(width: 8),
+              Text(
+                '🌍 Kenya Economic Context',
+                style: TextStyle(
+                  color: Colors.blueAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Kenya Inflation Rate',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              Text(
+                '${inflation.toStringAsFixed(1)}%',
+                style: const TextStyle(
+                  color: Colors.orange,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Your Profit Margin',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              Text(
+                '${margin.toStringAsFixed(1)}%',
+                style: const TextStyle(
+                  color: Color(0xFF22C55E),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 16, color: Colors.white12),
+          Row(
+            children: [
+              Icon(
+                beatsInflation ? Icons.check_circle : Icons.warning_amber,
+                color: beatsInflation ? const Color(0xFF22C55E) : Colors.orange,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  beatsInflation
+                      ? 'Your margin beats inflation by ${(margin - inflation).toStringAsFixed(1)}% — business growing in real value ✅'
+                      : 'Your margin is below inflation by ${(inflation - margin).toStringAsFixed(1)}% — consider raising prices ⚠️',
+                  style: TextStyle(
+                    color: beatsInflation
+                        ? const Color(0xFF22C55E)
+                        : Colors.orange,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                gdp > 0 ? Icons.trending_up : Icons.trending_down,
+                color: gdp > 0 ? const Color(0xFF22C55E) : Colors.red,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Kenya GDP Growth: ${gdp.toStringAsFixed(1)}% — ${gdp > 4 ? "Strong economy, good time to expand 📈" : "Slow growth, focus on efficiency 📉"}',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ),
+            ],
           ),
         ],
       ),

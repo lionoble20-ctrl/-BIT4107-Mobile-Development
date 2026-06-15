@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/inventory_item.dart';
 import '../services/database_helper.dart';
+import '../services/currency_service.dart';
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
@@ -53,12 +54,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: TextField(
               onChanged: (v) => setState(() => _searchQuery = v),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: 'Search products or categories...',
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                prefixIcon: Icon(Icons.search, color: Colors.grey),
+                contentPadding: EdgeInsets.symmetric(vertical: 10),
                 filled: true,
-                fillColor: const Color(0xFF1E293B),
+                fillColor: Color(0xFF1E293B),
               ),
             ),
           ),
@@ -152,7 +153,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 }
 
-class _ProductCard extends StatelessWidget {
+class _ProductCard extends StatefulWidget {
   final InventoryItem item;
   final String currency;
   final VoidCallback onUpdate;
@@ -164,13 +165,33 @@ class _ProductCard extends StatelessWidget {
   });
 
   @override
+  State<_ProductCard> createState() => _ProductCardState();
+}
+
+class _ProductCardState extends State<_ProductCard> {
+  String _usdPrice = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsdPrice();
+  }
+
+  Future<void> _loadUsdPrice() async {
+    final converted = await CurrencyService.kesToUSD(widget.item.sellingPrice);
+    if (mounted) {
+      setState(() => _usdPrice = 'USD ${converted.toStringAsFixed(2)}');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     Color statusColor;
     String statusText;
-    if (item.isOutOfStock) {
+    if (widget.item.isOutOfStock) {
       statusColor = Colors.red;
       statusText = 'Out of Stock';
-    } else if (item.isLowStock) {
+    } else if (widget.item.isLowStock) {
       statusColor = Colors.orange;
       statusText = 'Low Stock';
     } else {
@@ -193,31 +214,37 @@ class _ProductCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                item.category,
+                widget.item.category,
                 style: const TextStyle(color: Color(0xFF22C55E), fontSize: 10),
               ),
             ),
             const SizedBox(height: 6),
             Text(
-              item.name,
+              widget.item.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
             const SizedBox(height: 6),
             Text(
-              '$currency ${NumberFormat('#,##0').format(item.sellingPrice)}',
+              '${widget.currency} ${NumberFormat('#,##0').format(widget.item.sellingPrice)}',
               style: const TextStyle(
                 color: Color(0xFF22C55E),
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
               ),
             ),
+            // ← NEW: USD conversion line
+            if (_usdPrice.isNotEmpty)
+              Text(
+                _usdPrice,
+                style: const TextStyle(color: Colors.blueAccent, fontSize: 11),
+              ),
             const SizedBox(height: 2),
             Text(
-              '${item.stockQty} ${item.unit}',
+              '${widget.item.stockQty} ${widget.item.unit}',
               style: TextStyle(
-                color: item.isLowStock ? Colors.orange : Colors.grey,
+                color: widget.item.isLowStock ? Colors.orange : Colors.grey,
                 fontSize: 12,
               ),
             ),
@@ -244,14 +271,14 @@ class _ProductCard extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: item.isOutOfStock
+                  backgroundColor: widget.item.isOutOfStock
                       ? Colors.grey[800]
                       : const Color(0xFF22C55E),
                   foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   minimumSize: Size.zero,
                 ),
-                onPressed: item.isOutOfStock
+                onPressed: widget.item.isOutOfStock
                     ? null
                     : () => _showSaleDialog(context),
                 child: const Text(
@@ -273,18 +300,19 @@ class _ProductCard extends StatelessWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
           backgroundColor: const Color(0xFF1E293B),
-          title: Text('Sell ${item.name}'),
+          title: Text('Sell ${widget.item.name}'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Available: ${item.stockQty} ${item.unit}'),
+              Text('Available: ${widget.item.stockQty} ${widget.item.unit}'),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    onPressed: () =>
-                        setS(() => qty = (qty - 1).clamp(1, item.stockQty)),
+                    onPressed: () => setS(
+                      () => qty = (qty - 1).clamp(1, widget.item.stockQty),
+                    ),
                     icon: const Icon(Icons.remove_circle_outline),
                   ),
                   Text(
@@ -295,8 +323,9 @@ class _ProductCard extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    onPressed: () =>
-                        setS(() => qty = (qty + 1).clamp(1, item.stockQty)),
+                    onPressed: () => setS(
+                      () => qty = (qty + 1).clamp(1, widget.item.stockQty),
+                    ),
                     icon: const Icon(
                       Icons.add_circle_outline,
                       color: Color(0xFF22C55E),
@@ -305,11 +334,11 @@ class _ProductCard extends StatelessWidget {
                 ],
               ),
               Text(
-                'Revenue: $currency ${NumberFormat('#,##0.00').format(item.sellingPrice * qty)}',
+                'Revenue: ${widget.currency} ${NumberFormat('#,##0.00').format(widget.item.sellingPrice * qty)}',
                 style: const TextStyle(color: Color(0xFF22C55E)),
               ),
               Text(
-                'Profit: $currency ${NumberFormat('#,##0.00').format(item.profitMargin * qty)}',
+                'Profit: ${widget.currency} ${NumberFormat('#,##0.00').format(widget.item.profitMargin * qty)}',
                 style: const TextStyle(color: Colors.grey),
               ),
             ],
@@ -321,30 +350,29 @@ class _ProductCard extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () async {
-                // Save sale to SQLite
                 final sale = SaleRecord(
                   id: generateId(),
-                  productId: item.id,
-                  productName: item.name,
+                  productId: widget.item.id,
+                  productName: widget.item.name,
                   quantitySold: qty,
                   saleDate: DateTime.now(),
-                  totalRevenue: item.sellingPrice * qty,
-                  totalCost: item.costPrice * qty,
-                  profit: item.profitMargin * qty,
+                  totalRevenue: widget.item.sellingPrice * qty,
+                  totalCost: widget.item.costPrice * qty,
+                  profit: widget.item.profitMargin * qty,
                 );
-                item.stockQty -= qty;
-                item.unitsSold += qty;
-                item.lastSaleDate = DateTime.now();
-                await DatabaseHelper.instance.updateProduct(item);
+                widget.item.stockQty -= qty;
+                widget.item.unitsSold += qty;
+                widget.item.lastSaleDate = DateTime.now();
+                await DatabaseHelper.instance.updateProduct(widget.item);
                 await DatabaseHelper.instance.insertSale(sale);
                 globalSales.insert(0, sale);
-                onUpdate();
+                widget.onUpdate();
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                        'Sale saved: $qty ${item.unit} of ${item.name}',
+                        'Sale saved: $qty ${widget.item.unit} of ${widget.item.name}',
                       ),
                       backgroundColor: const Color(0xFF22C55E),
                     ),
