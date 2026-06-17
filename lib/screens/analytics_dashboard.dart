@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:retailapp/api_config.dart';
 import '../models/inventory_item.dart';
 import '../services/world_bank_service.dart'; // LINE 4 — NEW
 
@@ -28,11 +29,12 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
     // NEW
     try {
       final data = await WorldBankService.getKenyaData();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _worldBankData = data;
           _loadingWB = false;
         });
+      }
     } catch (e) {
       if (mounted) setState(() => _loadingWB = false);
     }

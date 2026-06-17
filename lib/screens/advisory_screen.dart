@@ -28,11 +28,12 @@ class _PredictiveAdvisoryScreenState extends State<PredictiveAdvisoryScreen> {
     // NEW
     try {
       final data = await WorldBankService.getKenyaData();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _worldBankData = data;
           _loadingWB = false;
         });
+      }
     } catch (e) {
       if (mounted) setState(() => _loadingWB = false);
     }
@@ -212,7 +213,7 @@ class _PredictiveAdvisoryScreenState extends State<PredictiveAdvisoryScreen> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
           const SizedBox(height: 8),
-          ...suggestions.map((s) => _SuggestionCard(data: s)).toList(),
+          ...suggestions.map((s) => _SuggestionCard(data: s)),
         ],
       ),
     );

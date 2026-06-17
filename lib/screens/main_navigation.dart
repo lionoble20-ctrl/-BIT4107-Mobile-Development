@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:retailapp/api_config.dart';
+import 'auth_screen.dart';
 import 'catalog_screen.dart';
 import 'inventory_form.dart';
 import 'analytics_dashboard.dart';
 import 'advisory_screen.dart';
-import 'currency_screen.dart'; // ADD THIS
+import 'currency_screen.dart';
 
 class MainNavigationContainer extends StatefulWidget {
-  const MainNavigationContainer({super.key});
+  // Explicitly capture the authenticated database map from the login pipeline
+  final Map<String, dynamic> authenticatedUser;
+
+  const MainNavigationContainer({super.key, required this.authenticatedUser});
 
   @override
   State<MainNavigationContainer> createState() =>
@@ -21,13 +26,90 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     InventoryFormScreen(),
     AnalyticsDashboardScreen(),
     PredictiveAdvisoryScreen(),
-    CurrencyScreen(), // ADD THIS
+    CurrencyScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Force global session variable matching before rendering viewport downstream elements
+    currentUserSession = widget.authenticatedUser;
+  }
+
+  // Systemic session wipe and route eviction routine
+  void _handleSignOut() {
+    setState(() {
+      currentUserSession = null; // Purge runtime state instance records
+    });
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+      (route) =>
+          false, // Flush full history stack to prevent unauthenticated back navigation
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Structural Global Command Bar for Session Oversight
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: const Color(0xFF0F172A),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.verified_user,
+                        color: Color(0xFF22C55E),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'OPERATOR: ${currentUserSession?['fullName']?.toUpperCase() ?? 'UNVERIFIED'}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ],
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: _handleSignOut,
+                    icon: const Icon(Icons.logout, size: 14),
+                    label: const Text(
+                      'LOGOUT',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Primary Application View Window
+            Expanded(child: _screens[_currentIndex]),
+          ],
+        ),
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
@@ -52,7 +134,6 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
             icon: Icon(Icons.psychology),
             label: 'Advisory Eng.',
           ),
-          // ADD THIS
           BottomNavigationBarItem(
             icon: Icon(Icons.currency_exchange),
             label: 'Rates',

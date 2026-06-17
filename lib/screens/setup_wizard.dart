@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/inventory_item.dart';
+// import '../models/inventory_item.dart'; // removed: unused
 import 'auth_screen.dart';
+import 'package:retailapp/api_config.dart';
 
 class SetupWizardScreen extends StatefulWidget {
   const SetupWizardScreen({super.key});
@@ -120,7 +121,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _selectedType,
+                  initialValue: _selectedType,
                   dropdownColor: const Color(0xFF1E293B),
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.category),
@@ -137,7 +138,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _selectedCurrency,
+                  initialValue: _selectedCurrency,
                   dropdownColor: const Color(0xFF1E293B),
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.attach_money),

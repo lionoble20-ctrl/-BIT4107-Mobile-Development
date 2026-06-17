@@ -22,6 +22,7 @@ class DatabaseHelper {
   final _productsStore = sembast.stringMapStoreFactory.store('products');
   final _salesStore = sembast.stringMapStoreFactory.store('sales');
   final _settingsStore = sembast.stringMapStoreFactory.store('settings');
+  final _usersStore = sembast.stringMapStoreFactory.store('users');
 
   DatabaseHelper._init();
 
@@ -48,8 +49,9 @@ class DatabaseHelper {
     final fullPath = path_helper.join(dbPath, 'retail_engine.db');
     _mobileDb = await sqflite.openDatabase(
       fullPath,
-      version: 1,
+      version: 2,
       onCreate: _createMobileDB,
+      onUpgrade: _upgradeMobileDB,
     );
   }
 
@@ -86,6 +88,32 @@ class DatabaseHelper {
       CREATE TABLE settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
+      )
+    ''');
+
+    await _createUsersTable(db);
+  }
+
+  Future<void> _upgradeMobileDB(
+    sqflite.Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await _createUsersTable(db);
+    }
+  }
+
+  Future<void> _createUsersTable(sqflite.Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS users (
+        email TEXT PRIMARY KEY,
+        fullName TEXT NOT NULL,
+        passwordHash TEXT NOT NULL,
+        role TEXT NOT NULL,
+        businessName TEXT,
+        phone TEXT,
+        dateCreated TEXT NOT NULL
       )
     ''');
   }
@@ -234,6 +262,102 @@ class DatabaseHelper {
       );
       if (maps.isEmpty) return null;
       return maps.first['value'] as String?;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // USERS — NEW
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Future<bool> insertUser({
+    required String email,
+    required String fullName,
+    required String passwordHash,
+    required String role,
+    String? businessName,
+    String? phone,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final existing = await getUserByEmail(normalizedEmail);
+    if (existing != null) return false;
+
+    final userMap = {
+      'email': normalizedEmail,
+      'fullName': fullName,
+      'passwordHash': passwordHash,
+      'role': role,
+      'businessName': businessName ?? '',
+      'phone': phone ?? '',
+      'dateCreated': DateTime.now().toIso8601String(),
+    };
+
+    if (kIsWeb) {
+      await _usersStore
+          .record(normalizedEmail)
+          .put(await _web, userMap.cast<String, Object?>());
+    } else {
+      final db = await _mobile;
+      await db.insert(
+        'users',
+        userMap,
+        conflictAlgorithm: sqflite.ConflictAlgorithm.fail,
+      );
+    }
+    return true;
+  }
+
+  Future<Map<String, dynamic>?> getUserByEmail(String email) async {
+    final normalizedEmail = email.trim().toLowerCase();
+
+    if (kIsWeb) {
+      final record = await _usersStore.record(normalizedEmail).get(await _web);
+      if (record == null) return null;
+      return Map<String, dynamic>.from(record);
+    } else {
+      final db = await _mobile;
+      final maps = await db.query(
+        'users',
+        where: 'email = ?',
+        whereArgs: [normalizedEmail],
+      );
+      if (maps.isEmpty) return null;
+      return maps.first;
+    }
+  }
+
+  Future<void> updateUser({
+    required String email,
+    required String fullName,
+    String? businessName,
+    String? phone,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final existing = await getUserByEmail(normalizedEmail);
+    if (existing == null) return;
+
+    final updated = {
+      ...existing,
+      'fullName': fullName,
+      'businessName': businessName ?? existing['businessName'],
+      'phone': phone ?? existing['phone'],
+    };
+
+    if (kIsWeb) {
+      await _usersStore
+          .record(normalizedEmail)
+          .put(await _web, updated.cast<String, Object?>());
+    } else {
+      final db = await _mobile;
+      await db.update(
+        'users',
+        {
+          'fullName': updated['fullName'],
+          'businessName': updated['businessName'],
+          'phone': updated['phone'],
+        },
+        where: 'email = ?',
+        whereArgs: [normalizedEmail],
+      );
     }
   }
 }

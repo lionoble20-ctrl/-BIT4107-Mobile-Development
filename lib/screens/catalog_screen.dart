@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:retailapp/api_config.dart';
 import '../models/inventory_item.dart';
 import '../services/database_helper.dart';
 import '../services/currency_service.dart';
+import 'profile_screen.dart'; // Import ProfileScreen link
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
@@ -47,6 +49,20 @@ class _CatalogScreenState extends State<CatalogScreen> {
             ),
           ],
         ),
+        actions: [
+          // Operator Profile Route Activation Icon
+          IconButton(
+            icon: const Icon(Icons.account_circle, size: 28),
+            tooltip: 'Operator Profile',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [
@@ -234,7 +250,6 @@ class _ProductCardState extends State<_ProductCard> {
                 fontSize: 15,
               ),
             ),
-            // ← NEW: USD conversion line
             if (_usdPrice.isNotEmpty)
               Text(
                 _usdPrice,

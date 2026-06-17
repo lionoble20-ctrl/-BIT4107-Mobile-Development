@@ -1,10 +1,9 @@
-
+import 'package:retailapp/api_config.dart';
+// Use the shared globalSettings; do NOT redeclare it here.
 
 // Global state — shared across all screens
 List<InventoryItem> globalInventory = [];
 List<SaleRecord> globalSales = [];
-BusinessSettings globalSettings = BusinessSettings();
-
 
 String generateId() => DateTime.now().millisecondsSinceEpoch.toString();
 
@@ -390,8 +389,9 @@ String answerQuestion(String question) {
     final low = globalInventory
         .where((i) => i.isLowStock || i.isOutOfStock)
         .toList();
-    if (low.isEmpty)
+    if (low.isEmpty) {
       return 'All products have adequate stock levels right now.';
+    }
     return 'Products needing restock: ${low.map((i) => i.name).join(', ')}.';
   }
 
@@ -404,14 +404,16 @@ String answerQuestion(String question) {
   }
 
   if (q.contains('breakeven')) {
-    if (globalInventory.isEmpty)
+    if (globalInventory.isEmpty) {
       return 'Add products first to calculate breakeven.';
+    }
     return 'Breakeven units:\n${globalInventory.map((i) => '${i.name}: ${i.breakevenUnits} units').join('\n')}';
   }
 
   if (q.contains('risk') || q.contains('loss')) {
-    if (pnl.lossRiskItems.isEmpty)
+    if (pnl.lossRiskItems.isEmpty) {
       return 'No items at immediate loss risk detected.';
+    }
     return 'Items at loss risk: ${pnl.lossRiskItems.join(', ')}. High holding costs vs profit.';
   }
 
@@ -425,8 +427,9 @@ String answerQuestion(String question) {
     final stagnant = globalInventory
         .where((i) => i.isStagnant && i.stockQty > 0)
         .toList();
-    if (stagnant.isEmpty)
+    if (stagnant.isEmpty) {
       return 'All products have had recent sales. Great job!';
+    }
     return 'Stagnant products (no sales in 7+ days): ${stagnant.map((i) => i.name).join(', ')}. Consider promotions.';
   }
 

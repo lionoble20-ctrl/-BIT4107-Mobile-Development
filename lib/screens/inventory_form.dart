@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:retailapp/api_config.dart';
 import '../models/inventory_item.dart';
 import '../services/database_helper.dart';
 
@@ -311,7 +312,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _unit,
+                      initialValue: _unit,
                       dropdownColor: const Color(0xFF1E293B),
                       decoration: const InputDecoration(
                         labelText: 'Unit',
@@ -418,7 +419,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         if (v == null || v.isEmpty) return 'Required';
         final n = isInt ? int.tryParse(v) : double.tryParse(v);
         if (n == null) return 'Enter valid number';
-        if ((n as num) < 0) return 'Cannot be negative';
+        if (n < 0) return 'Cannot be negative';
         return null;
       },
     );

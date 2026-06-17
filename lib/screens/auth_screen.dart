@@ -1,6 +1,17 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
-import '../models/inventory_item.dart';
+import 'package:retailapp/api_config.dart';
+import '../services/database_helper.dart';
 import 'main_navigation.dart';
+import 'register_screen.dart';
+
+/// SHA-256 Hash function
+String hashPassword(String password) {
+  final bytes = utf8.encode(password);
+  final digest = sha256.convert(bytes);
+  return digest.toString();
+}
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -15,6 +26,69 @@ class _AuthScreenState extends State<AuthScreen> {
   final _passCtrl = TextEditingController();
   bool _isMerchant = true;
   bool _obscure = true;
+  String _hashedPassword = '';
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleDatabaseLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final email = _emailCtrl.text.trim();
+    final plainPassword = _passCtrl.text;
+    final finalHash = hashPassword(plainPassword);
+    final selectedRole = _isMerchant ? 'Merchant' : 'Client';
+
+    // Query database record matching the provided identifier
+    final userRecord = await DatabaseHelper.instance.getUserByEmail(email);
+
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    if (userRecord != null) {
+      if (userRecord['passwordHash'] == finalHash) {
+        // Validate user role selection consistency
+        if (userRecord['role'] != selectedRole) {
+          _showAuthFailureSnackBar(
+            'Access Denied: Role mismatch for selected interface.',
+          );
+          return;
+        }
+
+        // Seeding memory mapping bounds explicitly before pushing navigation context
+        currentUserSession = userRecord;
+
+        // Navigate into main app container with state synchronization injection
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                MainNavigationContainer(authenticatedUser: userRecord),
+          ),
+        );
+      } else {
+        _showAuthFailureSnackBar('Invalid security access key credentials.');
+      }
+    } else {
+      _showAuthFailureSnackBar(
+        'Operator identifier not found in database registry.',
+      );
+    }
+  }
+
+  void _showAuthFailureSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +151,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 TextFormField(
                   controller: _passCtrl,
                   obscureText: _obscure,
+                  onChanged: (v) {
+                    setState(() => _hashedPassword = hashPassword(v));
+                  },
                   decoration: InputDecoration(
                     labelText: 'Security Access Key',
                     prefixIcon: const Icon(Icons.lock_outline),
@@ -90,7 +167,41 @@ class _AuthScreenState extends State<AuthScreen> {
                   validator: (v) =>
                       v == null || v.length < 4 ? 'Minimum 4 characters' : null,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
+                if (_hashedPassword.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: const Color(0xFF22C55E).withAlpha(60),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '🔐 SHA-256 Hash Generated:',
+                          style: TextStyle(
+                            color: Color(0xFF22C55E),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _hashedPassword,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 9,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -125,26 +236,44 @@ class _AuthScreenState extends State<AuthScreen> {
                       Switch(
                         value: _isMerchant,
                         onChanged: (v) => setState(() => _isMerchant = v),
-                        activeColor: const Color(0xFF22C55E),
+                        activeThumbColor: const Color(0xFF22C55E),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MainNavigationContainer(),
+                  onPressed: _isLoading ? null : _handleDatabaseLogin,
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.black,
+                            ),
+                          ),
+                        )
+                      : const Text(
+                          'AUTHORIZE ACCESS',
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
-                      );
-                    }
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                    );
                   },
                   child: const Text(
-                    'AUTHORIZE ACCESS',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    "Don't have an operator account? Register Here",
+                    style: TextStyle(
+                      color: Color(0xFF22C55E),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'api_config.dart';
-import 'models/inventory_item.dart';
-import 'screens/auth_screen.dart';
-import 'screens/setup_wizard.dart';
-import 'services/database_helper.dart';
+import '../models/inventory_item.dart';
+import '../screens/auth_screen.dart';
+import '../screens/setup_wizard.dart';
+import 'database_helper.dart';
+import '../api_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
