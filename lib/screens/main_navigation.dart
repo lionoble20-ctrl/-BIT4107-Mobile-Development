@@ -6,6 +6,7 @@ import 'inventory_form.dart';
 import 'analytics_dashboard.dart';
 import 'advisory_screen.dart';
 import 'currency_screen.dart';
+import 'profile_screen.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   // Explicitly capture the authenticated database map from the login pipeline
@@ -50,6 +51,13 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     );
   }
 
+  void _handleOpenProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -82,25 +90,41 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
                       ),
                     ],
                   ),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.redAccent,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: _handleOpenProfile,
+                        icon: const Icon(
+                          Icons.account_circle,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
+                        tooltip: 'Profile',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: _handleSignOut,
-                    icon: const Icon(Icons.logout, size: 14),
-                    label: const Text(
-                      'LOGOUT',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                      const SizedBox(width: 12),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: _handleSignOut,
+                        icon: const Icon(Icons.logout, size: 14),
+                        label: const Text(
+                          'LOGOUT',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
