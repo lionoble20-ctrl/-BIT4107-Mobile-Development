@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:retailapp/api_config.dart';
+import '../models/inventory_item.dart';
+import '../services/connectivity_service.dart';
 import 'auth_screen.dart';
 import 'catalog_screen.dart';
 import 'inventory_form.dart';
@@ -22,6 +25,12 @@ class MainNavigationContainer extends StatefulWidget {
 class _MainNavigationContainerState extends State<MainNavigationContainer> {
   int _currentIndex = 0;
 
+  bool _isOnline = true;
+  StreamSubscription<bool>? _connectivitySub;
+
+  List<InventoryItem> _flaggedStockItems = [];
+  Timer? _stockCheckTimer;
+
   final List<Widget> _screens = const [
     CatalogScreen(),
     InventoryFormScreen(),
@@ -35,6 +44,52 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
     super.initState();
     // Force global session variable matching before rendering viewport downstream elements
     currentUserSession = widget.authenticatedUser;
+
+    _isOnline = ConnectivityService.instance.isOnline;
+    _connectivitySub = ConnectivityService.instance.onStatusChange.listen((
+      online,
+    ) {
+      if (mounted) setState(() => _isOnline = online);
+    });
+
+    _checkLowStock();
+    _stockCheckTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _checkLowStock(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    _stockCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  void _checkLowStock() {
+    final flagged = globalInventory
+        .where((i) => i.isLowStock || i.isOutOfStock)
+        .toList();
+    if (mounted) setState(() => _flaggedStockItems = flagged);
+  }
+
+  String _buildLowStockMessage() {
+    final outOfStock = _flaggedStockItems
+        .where((i) => i.isOutOfStock)
+        .map((i) => i.name)
+        .toList();
+    final lowStock = _flaggedStockItems
+        .where((i) => i.isLowStock)
+        .map((i) => i.name)
+        .toList();
+
+    if (outOfStock.isNotEmpty && lowStock.isNotEmpty) {
+      return 'OUT OF STOCK: ${outOfStock.join(', ')}  •  Low: ${lowStock.join(', ')} — tap to restock';
+    } else if (outOfStock.isNotEmpty) {
+      return 'OUT OF STOCK: ${outOfStock.join(', ')} — tap to restock';
+    } else {
+      return 'Low stock: ${lowStock.join(', ')} — tap to restock';
+    }
   }
 
   // Systemic session wipe and route eviction routine
@@ -64,6 +119,45 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
       body: SafeArea(
         child: Column(
           children: [
+            if (!_isOnline)
+              Container(
+                width: double.infinity,
+                color: const Color(0xFFB91C1C),
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: const Text(
+                  'Offline — showing cached data, changes will not sync',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            if (_flaggedStockItems.isNotEmpty)
+              GestureDetector(
+                onTap: () => setState(() => _currentIndex = 1),
+                child: Container(
+                  width: double.infinity,
+                  color: _flaggedStockItems.any((i) => i.isOutOfStock)
+                      ? const Color(0xFFB91C1C)
+                      : const Color(0xFFF59E0B),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 6,
+                    horizontal: 12,
+                  ),
+                  child: Text(
+                    _buildLowStockMessage(),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
             // Structural Global Command Bar for Session Oversight
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

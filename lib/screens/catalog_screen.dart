@@ -4,6 +4,7 @@ import 'package:retailapp/api_config.dart';
 import '../models/inventory_item.dart';
 import '../services/database_helper.dart';
 import '../services/currency_service.dart';
+import '../services/payment_service.dart';
 import 'profile_screen.dart'; // Import ProfileScreen link
 
 class CatalogScreen extends StatefulWidget {
@@ -50,7 +51,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
           ],
         ),
         actions: [
-          // Operator Profile Route Activation Icon
           IconButton(
             icon: const Icon(Icons.account_circle, size: 28),
             tooltip: 'Operator Profile',
@@ -297,7 +297,7 @@ class _ProductCardState extends State<_ProductCard> {
                     ? null
                     : () => _showSaleDialog(context),
                 child: const Text(
-                  'SIMULATE SALE',
+                  'SELL VIA M-PESA',
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -310,91 +310,191 @@ class _ProductCardState extends State<_ProductCard> {
 
   void _showSaleDialog(BuildContext context) {
     int qty = 1;
+    final phoneController = TextEditingController();
+    bool isProcessing = false;
+    String? statusMessage;
+
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
           backgroundColor: const Color(0xFF1E293B),
           title: Text('Sell ${widget.item.name}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Available: ${widget.item.stockQty} ${widget.item.unit}'),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    onPressed: () => setS(
-                      () => qty = (qty - 1).clamp(1, widget.item.stockQty),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Available: ${widget.item.stockQty} ${widget.item.unit}'),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      onPressed: isProcessing
+                          ? null
+                          : () => setS(
+                              () => qty = (qty - 1).clamp(
+                                1,
+                                widget.item.stockQty,
+                              ),
+                            ),
+                      icon: const Icon(Icons.remove_circle_outline),
                     ),
-                    icon: const Icon(Icons.remove_circle_outline),
+                    Text(
+                      '$qty',
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: isProcessing
+                          ? null
+                          : () => setS(
+                              () => qty = (qty + 1).clamp(
+                                1,
+                                widget.item.stockQty,
+                              ),
+                            ),
+                      icon: const Icon(
+                        Icons.add_circle_outline,
+                        color: Color(0xFF22C55E),
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  'Revenue: ${widget.currency} ${NumberFormat('#,##0.00').format(widget.item.sellingPrice * qty)}',
+                  style: const TextStyle(color: Color(0xFF22C55E)),
+                ),
+                Text(
+                  'Profit: ${widget.currency} ${NumberFormat('#,##0.00').format(widget.item.profitMargin * qty)}',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: phoneController,
+                  enabled: !isProcessing,
+                  keyboardType: TextInputType.phone,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'M-Pesa phone (e.g. 254712345678)',
                   ),
+                ),
+                if (statusMessage != null) ...[
+                  const SizedBox(height: 12),
                   Text(
-                    '$qty',
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => setS(
-                      () => qty = (qty + 1).clamp(1, widget.item.stockQty),
-                    ),
-                    icon: const Icon(
-                      Icons.add_circle_outline,
-                      color: Color(0xFF22C55E),
+                    statusMessage!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color:
+                          statusMessage!.toLowerCase().contains('fail') ||
+                              statusMessage!.toLowerCase().contains('error') ||
+                              statusMessage!.toLowerCase().contains('timed out')
+                          ? Colors.redAccent
+                          : const Color(0xFF22C55E),
                     ),
                   ),
                 ],
-              ),
-              Text(
-                'Revenue: ${widget.currency} ${NumberFormat('#,##0.00').format(widget.item.sellingPrice * qty)}',
-                style: const TextStyle(color: Color(0xFF22C55E)),
-              ),
-              Text(
-                'Profit: ${widget.currency} ${NumberFormat('#,##0.00').format(widget.item.profitMargin * qty)}',
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ],
+                if (isProcessing) ...[
+                  const SizedBox(height: 12),
+                  const CircularProgressIndicator(color: Color(0xFF22C55E)),
+                ],
+              ],
+            ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: isProcessing ? null : () => Navigator.pop(ctx),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () async {
-                final sale = SaleRecord(
-                  id: generateId(),
-                  productId: widget.item.id,
-                  productName: widget.item.name,
-                  quantitySold: qty,
-                  saleDate: DateTime.now(),
-                  totalRevenue: widget.item.sellingPrice * qty,
-                  totalCost: widget.item.costPrice * qty,
-                  profit: widget.item.profitMargin * qty,
-                );
-                widget.item.stockQty -= qty;
-                widget.item.unitsSold += qty;
-                widget.item.lastSaleDate = DateTime.now();
-                await DatabaseHelper.instance.updateProduct(widget.item);
-                await DatabaseHelper.instance.insertSale(sale);
-                globalSales.insert(0, sale);
-                widget.onUpdate();
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Sale saved: $qty ${widget.item.unit} of ${widget.item.name}',
-                      ),
-                      backgroundColor: const Color(0xFF22C55E),
-                    ),
-                  );
-                }
-              },
-              child: const Text('Confirm Sale'),
+              onPressed: isProcessing
+                  ? null
+                  : () async {
+                      final phone = phoneController.text.trim();
+                      if (phone.length < 10) {
+                        setS(
+                          () => statusMessage = 'Enter a valid phone number',
+                        );
+                        return;
+                      }
+
+                      setS(() {
+                        isProcessing = true;
+                        statusMessage = 'Sending M-Pesa prompt...';
+                      });
+
+                      try {
+                        final invoiceId = await PaymentService.initiateMpesaPayment(
+                          phoneNumber: phone,
+                          amount: widget.item.sellingPrice * qty,
+                          customerEmail:
+                              currentUserSession?['email'] ??
+                              'customer@sifa.co.ke',
+                          apiRef:
+                              'SALE-${widget.item.id}-${DateTime.now().millisecondsSinceEpoch}',
+                        );
+
+                        setS(
+                          () => statusMessage =
+                              'Check your phone — enter M-Pesa PIN to confirm',
+                        );
+
+                        final result = await PaymentService.pollPaymentStatus(
+                          invoiceId: invoiceId,
+                        );
+
+                        if (result == 'COMPLETE') {
+                          final sale = SaleRecord(
+                            id: generateId(),
+                            productId: widget.item.id,
+                            productName: widget.item.name,
+                            quantitySold: qty,
+                            saleDate: DateTime.now(),
+                            totalRevenue: widget.item.sellingPrice * qty,
+                            totalCost: widget.item.costPrice * qty,
+                            profit: widget.item.profitMargin * qty,
+                          );
+                          widget.item.stockQty -= qty;
+                          widget.item.unitsSold += qty;
+                          widget.item.lastSaleDate = DateTime.now();
+                          await DatabaseHelper.instance.updateProduct(
+                            widget.item,
+                          );
+                          await DatabaseHelper.instance.insertSale(sale);
+                          globalSales.insert(0, sale);
+                          widget.onUpdate();
+
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Payment confirmed — $qty ${widget.item.unit} of ${widget.item.name} sold',
+                                ),
+                                backgroundColor: const Color(0xFF22C55E),
+                              ),
+                            );
+                          }
+                        } else {
+                          setS(() {
+                            isProcessing = false;
+                            statusMessage = result == 'TIMEOUT'
+                                ? 'Payment timed out — try again'
+                                : 'Payment failed — try again';
+                          });
+                        }
+                      } catch (e) {
+                        setS(() {
+                          isProcessing = false;
+                          statusMessage =
+                              'Error: could not reach payment service';
+                        });
+                      }
+                    },
+              child: Text(isProcessing ? 'Processing...' : 'Pay with M-Pesa'),
             ),
           ],
         ),
