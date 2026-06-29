@@ -3,6 +3,9 @@ import 'package:intl/intl.dart';
 import 'package:retailapp/api_config.dart';
 import '../models/inventory_item.dart';
 import '../services/database_helper.dart';
+import '../services/validator_service.dart';
+import '../services/input_handler_service.dart';
+import '../services/gesture_service.dart';
 
 class InventoryFormScreen extends StatefulWidget {
   const InventoryFormScreen({super.key});
@@ -73,6 +76,11 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
                   ),
                   confirmDismiss: (_) => _confirmDelete(context, item.name),
                   onDismissed: (_) async {
+                    GestureService.onProductSwipe(
+                      productName: item.name,
+                      direction: 'left',
+                      onAction: () {},
+                    );
                     await DatabaseHelper.instance.deleteProduct(item.id);
                     setState(() {
                       globalInventory.removeWhere((x) => x.id == item.id);
@@ -400,7 +408,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         hintText: hint,
       ),
       onChanged: (_) => _recalculate(),
-      validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+      validator: (v) => ValidatorService.validateProductName(v ?? ''),
     );
   }
 
@@ -415,13 +423,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
       onChanged: (_) => _recalculate(),
-      validator: (v) {
-        if (v == null || v.isEmpty) return 'Required';
-        final n = isInt ? int.tryParse(v) : double.tryParse(v);
-        if (n == null) return 'Enter valid number';
-        if (n < 0) return 'Cannot be negative';
-        return null;
-      },
+      validator: (v) => isInt
+          ? ValidatorService.validateStockQuantity(v ?? '')
+          : ValidatorService.validatePrice(v ?? ''),
     );
   }
 
@@ -448,6 +452,23 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
+    InputHandlerService.handleStockEntrySubmit(
+      name: _nameCtrl.text.trim(),
+      price: _sellCtrl.text.trim(),
+      stock: _stockCtrl.text.trim(),
+      onValid: _persistProduct,
+      onInvalid: (errors) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errors.values.first),
+            backgroundColor: Colors.red,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _persistProduct() async {
     final item = InventoryItem(
       id: widget.existing?.id ?? generateId(),
       name: _nameCtrl.text.trim(),

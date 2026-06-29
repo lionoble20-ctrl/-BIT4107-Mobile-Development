@@ -5,7 +5,10 @@ import '../models/inventory_item.dart';
 import '../services/database_helper.dart';
 import '../services/currency_service.dart';
 import '../services/payment_service.dart';
+import '../services/input_handler_service.dart';
+import '../services/gesture_service.dart';
 import 'profile_screen.dart'; // Import ProfileScreen link
+import 'logs_screen.dart';
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
@@ -52,6 +55,16 @@ class _CatalogScreenState extends State<CatalogScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.receipt_long_outlined, size: 26),
+            tooltip: 'View Event Logs',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LogsScreen()),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.account_circle, size: 28),
             tooltip: 'Operator Profile',
             onPressed: () {
@@ -69,7 +82,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: TextField(
-              onChanged: (v) => setState(() => _searchQuery = v),
+              onChanged: (v) => InputHandlerService.handleCatalogSearchInput(
+                query: v,
+                onSearch: (q) => setState(() => _searchQuery = q),
+              ),
               decoration: const InputDecoration(
                 hintText: 'Search products or categories...',
                 prefixIcon: Icon(Icons.search, color: Colors.grey),
@@ -215,95 +231,138 @@ class _ProductCardState extends State<_ProductCard> {
       statusText = 'In Stock';
     }
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Column(
+    return GestureDetector(
+      onLongPress: () => GestureService.onProductLongPress(
+        productName: widget.item.name,
+        onAction: () => _showQuickView(context),
+      ),
+      child: Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF22C55E).withAlpha(30),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  widget.item.category,
+                  style: const TextStyle(
+                    color: Color(0xFF22C55E),
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                widget.item.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${widget.currency} ${NumberFormat('#,##0').format(widget.item.sellingPrice)}',
+                style: const TextStyle(
+                  color: Color(0xFF22C55E),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+              if (_usdPrice.isNotEmpty)
+                Text(
+                  _usdPrice,
+                  style: const TextStyle(
+                    color: Colors.blueAccent,
+                    fontSize: 11,
+                  ),
+                ),
+              const SizedBox(height: 2),
+              Text(
+                '${widget.item.stockQty} ${widget.item.unit}',
+                style: TextStyle(
+                  color: widget.item.isLowStock ? Colors.orange : Colors.grey,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withAlpha(40),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  statusText,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.item.isOutOfStock
+                        ? Colors.grey[800]
+                        : const Color(0xFF22C55E),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    minimumSize: Size.zero,
+                  ),
+                  onPressed: widget.item.isOutOfStock
+                      ? null
+                      : () => GestureService.onProductTap(
+                          productName: widget.item.name,
+                          onAction: () => _showSaleDialog(context),
+                        ),
+                  child: const Text(
+                    'SELL VIA M-PESA',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showQuickView(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: Text(widget.item.name),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: const Color(0xFF22C55E).withAlpha(30),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                widget.item.category,
-                style: const TextStyle(color: Color(0xFF22C55E), fontSize: 10),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              widget.item.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${widget.currency} ${NumberFormat('#,##0').format(widget.item.sellingPrice)}',
-              style: const TextStyle(
-                color: Color(0xFF22C55E),
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-              ),
-            ),
-            if (_usdPrice.isNotEmpty)
-              Text(
-                _usdPrice,
-                style: const TextStyle(color: Colors.blueAccent, fontSize: 11),
-              ),
-            const SizedBox(height: 2),
-            Text(
-              '${widget.item.stockQty} ${widget.item.unit}',
-              style: TextStyle(
-                color: widget.item.isLowStock ? Colors.orange : Colors.grey,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withAlpha(40),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                statusText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: statusColor,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.item.isOutOfStock
-                      ? Colors.grey[800]
-                      : const Color(0xFF22C55E),
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  minimumSize: Size.zero,
-                ),
-                onPressed: widget.item.isOutOfStock
-                    ? null
-                    : () => _showSaleDialog(context),
-                child: const Text(
-                  'SELL VIA M-PESA',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
+            Text('Category: ${widget.item.category}'),
+            Text('Stock: ${widget.item.stockQty} ${widget.item.unit}'),
+            Text('Price: ${widget.currency} ${widget.item.sellingPrice}'),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }

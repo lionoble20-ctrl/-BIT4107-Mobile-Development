@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import '../services/database_helper.dart';
+import '../services/validator_service.dart';
+import '../services/input_handler_service.dart';
+import '../services/event_logger_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -39,11 +42,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    InputHandlerService.handleRegisterSubmit(
+      email: email,
+      password: password,
+      confirmPassword: confirmPassword,
+      onValid: () => _performRegister(email, password),
+      onInvalid: (errors) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errors.values.first),
+            backgroundColor: Colors.red,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _performRegister(String email, String password) async {
     setState(() => _isLoading = true);
 
-    final email = _emailController.text.trim();
     final fullName = _nameController.text.trim();
-    final passwordHash = _hashPassword(_passwordController.text);
+    final passwordHash = _hashPassword(password);
 
     // Persist to database using the upgraded schema method
     final success = await DatabaseHelper.instance.insertUser(
@@ -58,6 +81,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!mounted) return;
 
     if (success) {
+      EventLoggerService.log('REGISTER', 'New operator registered: $email');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Operator registered successfully. Please log in.'),
@@ -66,6 +90,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       Navigator.pop(context); // Return to AuthScreen
     } else {
+      EventLoggerService.log(
+        'REGISTER',
+        'Registration failed — email already exists: $email',
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -117,17 +145,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     prefixIcon: Icon(Icons.email_outlined),
                   ),
                   keyboardType: TextInputType.emailAddress,
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Email required';
-                    }
-                    if (!RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                    ).hasMatch(val.trim())) {
-                      return 'Provide a valid email format';
-                    }
-                    return null;
-                  },
+                  validator: (val) => ValidatorService.validateEmail(val ?? ''),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
@@ -167,9 +185,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
-                  validator: (val) => val == null || val.length < 6
-                      ? 'Minimum 6 characters required'
-                      : null,
+                  validator: (val) =>
+                      ValidatorService.validatePassword(val ?? ''),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -188,12 +205,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           setState(() => _obscureConfirm = !_obscureConfirm),
                     ),
                   ),
-                  validator: (val) {
-                    if (val != _passwordController.text) {
-                      return 'Security keys do not match';
-                    }
-                    return null;
-                  },
+                  validator: (val) => ValidatorService.validatePasswordMatch(
+                    _passwordController.text,
+                    val ?? '',
+                  ),
                 ),
                 const SizedBox(height: 32),
                 ElevatedButton(

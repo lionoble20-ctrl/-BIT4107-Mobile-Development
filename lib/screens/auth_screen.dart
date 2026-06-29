@@ -3,6 +3,9 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:retailapp/api_config.dart';
 import '../services/database_helper.dart';
+import '../services/validator_service.dart';
+import '../services/input_handler_service.dart';
+import '../services/event_logger_service.dart';
 import 'main_navigation.dart';
 import 'register_screen.dart';
 
@@ -39,10 +42,22 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _handleDatabaseLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
-
     final email = _emailCtrl.text.trim();
     final plainPassword = _passCtrl.text;
+
+    InputHandlerService.handleLoginSubmit(
+      email: email,
+      password: plainPassword,
+      onValid: () => _performLogin(email, plainPassword),
+      onInvalid: (errors) {
+        _showAuthFailureSnackBar(errors.values.first);
+      },
+    );
+  }
+
+  Future<void> _performLogin(String email, String plainPassword) async {
+    setState(() => _isLoading = true);
+
     final finalHash = hashPassword(plainPassword);
     final selectedRole = _isMerchant ? 'Merchant' : 'Client';
 
@@ -57,11 +72,16 @@ class _AuthScreenState extends State<AuthScreen> {
       if (userRecord['passwordHash'] == finalHash) {
         // Validate user role selection consistency
         if (userRecord['role'] != selectedRole) {
+          EventLoggerService.logLoginEvent(
+            'Login blocked — role mismatch for $email',
+          );
           _showAuthFailureSnackBar(
             'Access Denied: Role mismatch for selected interface.',
           );
           return;
         }
+
+        EventLoggerService.logLoginEvent('Login successful for $email');
 
         // Seeding memory mapping bounds explicitly before pushing navigation context
         currentUserSession = userRecord;
@@ -75,9 +95,13 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         );
       } else {
+        EventLoggerService.logLoginEvent(
+          'Login failed — wrong password for $email',
+        );
         _showAuthFailureSnackBar('Invalid security access key credentials.');
       }
     } else {
+      EventLoggerService.logLoginEvent('Login failed — no record for $email');
       _showAuthFailureSnackBar(
         'Operator identifier not found in database registry.',
       );
@@ -144,8 +168,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     labelText: 'Operator Identifier (Email)',
                     prefixIcon: Icon(Icons.person_outline),
                   ),
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Email required' : null,
+                  validator: (v) => ValidatorService.validateEmail(v ?? ''),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -164,8 +187,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                   ),
-                  validator: (v) =>
-                      v == null || v.length < 4 ? 'Minimum 4 characters' : null,
+                  validator: (v) => ValidatorService.validatePassword(v ?? ''),
                 ),
                 const SizedBox(height: 8),
                 if (_hashedPassword.isNotEmpty)
