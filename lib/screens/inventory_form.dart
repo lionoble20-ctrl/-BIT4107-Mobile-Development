@@ -1,11 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:retailapp/api_config.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/inventory_item.dart';
 import '../services/database_helper.dart';
 import '../services/validator_service.dart';
 import '../services/input_handler_service.dart';
+import '../services/event_logger_service.dart';
 import '../services/gesture_service.dart';
+import '../services/gemini_service.dart';
 
 class InventoryFormScreen extends StatefulWidget {
   const InventoryFormScreen({super.key});
@@ -191,7 +195,7 @@ class _InventoryFormScreenState extends State<InventoryFormScreen> {
   }
 }
 
-// ── PRODUCT FORM ──────────────────────────────────────────────────────────────
+// ── PRODUCT FORM ─────────────────────────────────────────────────────────────
 
 class ProductFormScreen extends StatefulWidget {
   final InventoryItem? existing;
@@ -209,10 +213,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late TextEditingController _sellCtrl;
   late TextEditingController _stockCtrl;
   String _unit = 'units';
+  bool _isAnalysing = false;
+  String? _aiDescription;
+  double? _aiConfidence;
+  File? _aiImage;
 
   double _margin = 0;
   double _expectedRevenue = 0;
   double _expectedProfit = 0;
+
+  final ImagePicker _picker = ImagePicker();
 
   final List<String> _units = [
     'units',
@@ -248,6 +258,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _recalculate();
   }
 
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _categoryCtrl.dispose();
+    _costCtrl.dispose();
+    _sellCtrl.dispose();
+    _stockCtrl.dispose();
+    super.dispose();
+  }
+
   void _recalculate() {
     final cost = double.tryParse(_costCtrl.text) ?? 0;
     final sell = double.tryParse(_sellCtrl.text) ?? 0;
@@ -257,6 +277,74 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       _expectedRevenue = sell * stock;
       _expectedProfit = (sell - cost) * stock;
     });
+  }
+
+  // ── AI SCAN ──────────────────────────────────────────────────────────────
+
+  Future<void> _scanWithAI() async {
+    try {
+      final XFile? photo = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+        maxWidth: 1024,
+      );
+
+      if (photo == null) return;
+
+      setState(() {
+        _isAnalysing = true;
+        _aiDescription = null;
+        _aiConfidence = null;
+        _aiImage = File(photo.path);
+      });
+
+      EventLoggerService.log(
+        'AI',
+        'Gemini product analysis started for captured image',
+      );
+
+      final result = await GeminiService.analyseProduct(File(photo.path));
+
+      // Auto-fill form fields with AI results
+      setState(() {
+        _nameCtrl.text = result.name;
+        _categoryCtrl.text = result.category;
+        _costCtrl.text = result.suggestedCostPrice.toStringAsFixed(0);
+        _sellCtrl.text = result.suggestedSellingPrice.toStringAsFixed(0);
+        _aiDescription = result.description;
+        _aiConfidence = result.confidence;
+        _isAnalysing = false;
+      });
+
+      _recalculate();
+
+      EventLoggerService.log(
+        'AI',
+        'Gemini identified: ${result.name} (${(result.confidence * 100).toStringAsFixed(0)}% confidence)',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'AI identified: ${result.name} — review and adjust if needed',
+            ),
+            backgroundColor: const Color(0xFF22C55E),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isAnalysing = false);
+      EventLoggerService.log('AI', 'Gemini analysis failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI analysis failed. Fill in the details manually.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -273,6 +361,140 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // ── AI SCAN BUTTON ──
+              if (!isEdit) ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFF22C55E).withAlpha(60),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.auto_awesome,
+                            color: Color(0xFF22C55E),
+                            size: 18,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'AI Product Recognition',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Color(0xFF22C55E),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Point your camera at a product — AI will identify it and auto-fill the form.',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Show captured image preview if available
+                      if (_aiImage != null) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(
+                            _aiImage!,
+                            height: 120,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+
+                      // AI result description
+                      if (_aiDescription != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF22C55E).withAlpha(20),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _aiDescription!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'AI Confidence: ${((_aiConfidence ?? 0) * 100).toStringAsFixed(0)}%',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: (_aiConfidence ?? 0) > 0.7
+                                      ? const Color(0xFF22C55E)
+                                      : Colors.orange,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+
+                      ElevatedButton.icon(
+                        onPressed: _isAnalysing ? null : _scanWithAI,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF22C55E),
+                          foregroundColor: Colors.black,
+                        ),
+                        icon: _isAnalysing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.black,
+                                ),
+                              )
+                            : const Icon(Icons.camera_alt, size: 18),
+                        label: Text(
+                          _isAnalysing
+                              ? 'AI Analysing...'
+                              : _aiDescription != null
+                              ? 'Scan Again'
+                              : 'Scan Product with AI',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Row(
+                  children: [
+                    Expanded(child: Divider()),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        'or fill in manually',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ),
+                    Expanded(child: Divider()),
+                  ],
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              // ── FORM FIELDS ──
               _field(
                 _nameCtrl,
                 'Item Name',
@@ -337,6 +559,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 ],
               ),
               const SizedBox(height: 20),
+
               // Live calculation preview
               Container(
                 padding: const EdgeInsets.all(16),
@@ -482,7 +705,6 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       lastSaleDate: widget.existing?.lastSaleDate,
     );
 
-    // Save to SQLite database
     if (widget.existing != null) {
       await DatabaseHelper.instance.updateProduct(item);
       final idx = globalInventory.indexWhere((i) => i.id == item.id);

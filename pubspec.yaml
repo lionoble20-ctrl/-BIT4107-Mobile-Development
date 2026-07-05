@@ -19,6 +19,10 @@ dependencies:
   http: ^1.6.0
   crypto: ^3.0.7
   connectivity_plus: ^7.0.0
+  image_picker: ^1.1.2
+  geolocator: ^13.0.2
+  geocoding: ^3.0.0 
+  google_generative_ai: ^0.4.6
 
 dev_dependencies:
   flutter_test:

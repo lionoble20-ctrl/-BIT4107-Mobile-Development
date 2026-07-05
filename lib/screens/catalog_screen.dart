@@ -7,8 +7,9 @@ import '../services/currency_service.dart';
 import '../services/payment_service.dart';
 import '../services/input_handler_service.dart';
 import '../services/gesture_service.dart';
-import 'profile_screen.dart'; // Import ProfileScreen link
+import 'profile_screen.dart';
 import 'logs_screen.dart';
+import 'device_features_screen.dart';
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
@@ -54,6 +55,16 @@ class _CatalogScreenState extends State<CatalogScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.camera_alt_outlined, size: 26),
+            tooltip: 'Device Features',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DeviceFeaturesScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.receipt_long_outlined, size: 26),
             tooltip: 'View Event Logs',
@@ -479,12 +490,10 @@ class _ProductCardState extends State<_ProductCard> {
                         );
                         return;
                       }
-
                       setS(() {
                         isProcessing = true;
                         statusMessage = 'Sending M-Pesa prompt...';
                       });
-
                       try {
                         final invoiceId = await PaymentService.initiateMpesaPayment(
                           phoneNumber: phone,
@@ -495,16 +504,13 @@ class _ProductCardState extends State<_ProductCard> {
                           apiRef:
                               'SALE-${widget.item.id}-${DateTime.now().millisecondsSinceEpoch}',
                         );
-
                         setS(
                           () => statusMessage =
                               'Check your phone — enter M-Pesa PIN to confirm',
                         );
-
                         final result = await PaymentService.pollPaymentStatus(
                           invoiceId: invoiceId,
                         );
-
                         if (result == 'COMPLETE') {
                           final sale = SaleRecord(
                             id: generateId(),
@@ -525,7 +531,6 @@ class _ProductCardState extends State<_ProductCard> {
                           await DatabaseHelper.instance.insertSale(sale);
                           globalSales.insert(0, sale);
                           widget.onUpdate();
-
                           if (ctx.mounted) Navigator.pop(ctx);
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(

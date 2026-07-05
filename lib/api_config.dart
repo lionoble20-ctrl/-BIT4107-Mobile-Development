@@ -1,6 +1,14 @@
 // Central API keys + minimal global app state used by screens.
 // Replace placeholder values with your real app settings as needed.
 
+// ── GEMINI AI ──────────────────────────────────────────────────────────────
+// API key is stored in a local .env file (not committed to GitHub)
+// Run: flutter pub add flutter_dotenv, then create .env with GEMINI_API_KEY=your_key
+const String geminiApiKey = String.fromEnvironment(
+  'GEMINI_API_KEY',
+  defaultValue: '',
+);
+
 class ApiConfig {
   // Open Exchange Rates
   static const String openExchangeAppId = '46231008999b422399191af3964900eb';
