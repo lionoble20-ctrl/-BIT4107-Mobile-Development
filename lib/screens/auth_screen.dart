@@ -8,6 +8,7 @@ import '../services/input_handler_service.dart';
 import '../services/event_logger_service.dart';
 import 'main_navigation.dart';
 import 'register_screen.dart';
+import 'forgot_password_screen.dart';
 
 /// SHA-256 Hash function
 String hashPassword(String password) {
@@ -296,6 +297,20 @@ class _AuthScreenState extends State<AuthScreen> {
                       color: Color(0xFF22C55E),
                       fontWeight: FontWeight.w600,
                     ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ForgotPasswordScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Forgot Password?',
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
                   ),
                 ),
                 const SizedBox(height: 20),

@@ -6,6 +6,13 @@ import '../services/validator_service.dart';
 import '../services/input_handler_service.dart';
 import '../services/event_logger_service.dart';
 
+const List<String> kSecurityQuestions = [
+  'What was the name of your first pet?',
+  'What is your mother\'s maiden name?',
+  'What city were you born in?',
+  'What was the name of your first school?',
+];
+
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -19,8 +26,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _securityAnswerController = TextEditingController();
 
   String _selectedRole = 'Merchant';
+  String _selectedSecurityQuestion = kSecurityQuestions.first;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
@@ -31,11 +40,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _securityAnswerController.dispose();
     super.dispose();
   }
 
   String _hashPassword(String password) {
     final bytes = utf8.encode(password);
+    return sha256.convert(bytes).toString();
+  }
+
+  String _hashAnswer(String answer) {
+    // Normalize so "Blue" and "blue " hash the same way
+    final normalized = answer.trim().toLowerCase();
+    final bytes = utf8.encode(normalized);
     return sha256.convert(bytes).toString();
   }
 
@@ -67,13 +84,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final fullName = _nameController.text.trim();
     final passwordHash = _hashPassword(password);
+    final securityAnswerHash = _hashAnswer(_securityAnswerController.text);
 
-    // Persist to database using the upgraded schema method
     final success = await DatabaseHelper.instance.insertUser(
       email: email,
       fullName: fullName,
       passwordHash: passwordHash,
       role: _selectedRole,
+      securityQuestion: _selectedSecurityQuestion,
+      securityAnswerHash: securityAnswerHash,
     );
 
     setState(() => _isLoading = false);
@@ -209,6 +228,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     _passwordController.text,
                     val ?? '',
                   ),
+                ),
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 8),
+                const Text(
+                  'Account Recovery',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Used to verify your identity if you forget your password.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedSecurityQuestion,
+                  decoration: const InputDecoration(
+                    labelText: 'Security Question',
+                    prefixIcon: Icon(Icons.help_outline),
+                  ),
+                  items: kSecurityQuestions
+                      .map((q) => DropdownMenuItem(value: q, child: Text(q)))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _selectedSecurityQuestion = val);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _securityAnswerController,
+                  decoration: const InputDecoration(
+                    labelText: 'Your Answer',
+                    prefixIcon: Icon(Icons.question_answer_outlined),
+                  ),
+                  validator: (val) => val == null || val.trim().isEmpty
+                      ? 'Security answer required'
+                      : null,
                 ),
                 const SizedBox(height: 32),
                 ElevatedButton(

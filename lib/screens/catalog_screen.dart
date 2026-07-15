@@ -383,6 +383,27 @@ class _ProductCardState extends State<_ProductCard> {
     final phoneController = TextEditingController();
     bool isProcessing = false;
     String? statusMessage;
+    bool useSimulatedPayment = true; // default to safe demo mode
+
+    Future<void> recordSale() async {
+      final sale = SaleRecord(
+        id: generateId(),
+        productId: widget.item.id,
+        productName: widget.item.name,
+        quantitySold: qty,
+        saleDate: DateTime.now(),
+        totalRevenue: widget.item.sellingPrice * qty,
+        totalCost: widget.item.costPrice * qty,
+        profit: widget.item.profitMargin * qty,
+      );
+      widget.item.stockQty -= qty;
+      widget.item.unitsSold += qty;
+      widget.item.lastSaleDate = DateTime.now();
+      await DatabaseHelper.instance.updateProduct(widget.item);
+      await DatabaseHelper.instance.insertSale(sale);
+      globalSales.insert(0, sale);
+      widget.onUpdate();
+    }
 
     showDialog(
       context: context,
@@ -442,7 +463,31 @@ class _ProductCardState extends State<_ProductCard> {
                   'Profit: ${widget.currency} ${NumberFormat('#,##0.00').format(widget.item.profitMargin * qty)}',
                   style: const TextStyle(color: Colors.grey),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  value: useSimulatedPayment,
+                  onChanged: isProcessing
+                      ? null
+                      : (v) => setS(() => useSimulatedPayment = v),
+                  title: const Text(
+                    'Simulate payment',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    useSimulatedPayment
+                        ? 'Safe demo mode — no real money moves'
+                        : 'Real M-Pesa STK push — real money will move',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: useSimulatedPayment
+                          ? Colors.grey
+                          : Colors.redAccent,
+                    ),
+                  ),
+                  activeThumbColor: const Color(0xFF22C55E),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 4),
                 TextField(
                   controller: phoneController,
                   enabled: !isProcessing,
@@ -492,45 +537,39 @@ class _ProductCardState extends State<_ProductCard> {
                       }
                       setS(() {
                         isProcessing = true;
-                        statusMessage = 'Sending M-Pesa prompt...';
+                        statusMessage = useSimulatedPayment
+                            ? 'Simulating payment...'
+                            : 'Sending M-Pesa prompt...';
                       });
                       try {
-                        final invoiceId = await PaymentService.initiateMpesaPayment(
-                          phoneNumber: phone,
-                          amount: widget.item.sellingPrice * qty,
-                          customerEmail:
-                              currentUserSession?['email'] ??
-                              'customer@sifa.co.ke',
-                          apiRef:
-                              'SALE-${widget.item.id}-${DateTime.now().millisecondsSinceEpoch}',
-                        );
-                        setS(
-                          () => statusMessage =
-                              'Check your phone — enter M-Pesa PIN to confirm',
-                        );
-                        final result = await PaymentService.pollPaymentStatus(
-                          invoiceId: invoiceId,
-                        );
+                        String result;
+                        if (useSimulatedPayment) {
+                          result = await PaymentService.simulateMpesaPayment(
+                            phoneNumber: phone,
+                            amount: widget.item.sellingPrice * qty,
+                          );
+                        } else {
+                          final invoiceId =
+                              await PaymentService.initiateMpesaPayment(
+                                phoneNumber: phone,
+                                amount: widget.item.sellingPrice * qty,
+                                customerEmail:
+                                    currentUserSession?['email'] ??
+                                    'customer@sifa.co.ke',
+                                apiRef:
+                                    'SALE-${widget.item.id}-${DateTime.now().millisecondsSinceEpoch}',
+                              );
+                          setS(
+                            () => statusMessage =
+                                'Check your phone — enter M-Pesa PIN to confirm',
+                          );
+                          result = await PaymentService.pollPaymentStatus(
+                            invoiceId: invoiceId,
+                          );
+                        }
+
                         if (result == 'COMPLETE') {
-                          final sale = SaleRecord(
-                            id: generateId(),
-                            productId: widget.item.id,
-                            productName: widget.item.name,
-                            quantitySold: qty,
-                            saleDate: DateTime.now(),
-                            totalRevenue: widget.item.sellingPrice * qty,
-                            totalCost: widget.item.costPrice * qty,
-                            profit: widget.item.profitMargin * qty,
-                          );
-                          widget.item.stockQty -= qty;
-                          widget.item.unitsSold += qty;
-                          widget.item.lastSaleDate = DateTime.now();
-                          await DatabaseHelper.instance.updateProduct(
-                            widget.item,
-                          );
-                          await DatabaseHelper.instance.insertSale(sale);
-                          globalSales.insert(0, sale);
-                          widget.onUpdate();
+                          await recordSale();
                           if (ctx.mounted) Navigator.pop(ctx);
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(

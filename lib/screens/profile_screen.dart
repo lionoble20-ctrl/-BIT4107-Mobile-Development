@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_helper.dart';
 import 'package:retailapp/api_config.dart';
+import 'admin_reset_password_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -85,6 +87,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _handleThemeToggle(bool isDark) async {
+    themeModeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isDarkMode', isDark);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (currentUserSession == null) {
@@ -93,6 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final email = currentUserSession?['email'] ?? '';
     final role = currentUserSession?['role'] ?? '';
+    final isMerchant = role == 'Merchant';
 
     return Scaffold(
       appBar: AppBar(
@@ -122,7 +131,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
+                  color: Theme.of(context).cardTheme.color,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -229,6 +238,98 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 28),
+              const Divider(),
+              const SizedBox(height: 8),
+              const Text(
+                'Appearance',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Switch between dark and light interface themes.',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              ValueListenableBuilder<ThemeMode>(
+                valueListenable: themeModeNotifier,
+                builder: (context, mode, _) {
+                  final isDark = mode == ThemeMode.dark;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardTheme.color,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              isDark
+                                  ? Icons.dark_mode_outlined
+                                  : Icons.light_mode_outlined,
+                              color: const Color(0xFF22C55E),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(isDark ? 'Dark Mode' : 'Light Mode'),
+                          ],
+                        ),
+                        Switch(
+                          value: isDark,
+                          onChanged: _handleThemeToggle,
+                          activeThumbColor: const Color(0xFF22C55E),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              if (isMerchant) ...[
+                const SizedBox(height: 28),
+                const Divider(),
+                const SizedBox(height: 8),
+                const Text(
+                  'Administration',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Merchant-only tools for managing operator accounts.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AdminResetPasswordScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.lock_reset,
+                      color: Color(0xFF22C55E),
+                    ),
+                    label: const Text(
+                      'Reset Operator Password',
+                      style: TextStyle(color: Color(0xFF22C55E)),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: const BorderSide(color: Color(0xFF22C55E)),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

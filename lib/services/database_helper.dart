@@ -49,7 +49,7 @@ class DatabaseHelper {
     final fullPath = path_helper.join(dbPath, 'retail_engine.db');
     _mobileDb = await sqflite.openDatabase(
       fullPath,
-      version: 2,
+      version: 3,
       onCreate: _createMobileDB,
       onUpgrade: _upgradeMobileDB,
     );
@@ -102,6 +102,9 @@ class DatabaseHelper {
     if (oldVersion < 2) {
       await _createUsersTable(db);
     }
+    if (oldVersion < 3) {
+      await _addSecurityQuestionColumns(db);
+    }
   }
 
   Future<void> _createUsersTable(sqflite.Database db) async {
@@ -113,9 +116,24 @@ class DatabaseHelper {
         role TEXT NOT NULL,
         businessName TEXT,
         phone TEXT,
-        dateCreated TEXT NOT NULL
+        dateCreated TEXT NOT NULL,
+        securityQuestion TEXT,
+        securityAnswerHash TEXT
       )
     ''');
+  }
+
+  Future<void> _addSecurityQuestionColumns(sqflite.Database db) async {
+    // Guard against re-adding columns if this migration ever runs twice
+    final columns = await db.rawQuery('PRAGMA table_info(users)');
+    final existingNames = columns.map((c) => c['name'] as String).toSet();
+
+    if (!existingNames.contains('securityQuestion')) {
+      await db.execute('ALTER TABLE users ADD COLUMN securityQuestion TEXT');
+    }
+    if (!existingNames.contains('securityAnswerHash')) {
+      await db.execute('ALTER TABLE users ADD COLUMN securityAnswerHash TEXT');
+    }
   }
 
   // ── Getters ──────────────────────────────────────────────────────────────
@@ -266,7 +284,7 @@ class DatabaseHelper {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // USERS — NEW
+  // USERS
   // ══════════════════════════════════════════════════════════════════════════
 
   Future<bool> insertUser({
@@ -276,6 +294,8 @@ class DatabaseHelper {
     required String role,
     String? businessName,
     String? phone,
+    String? securityQuestion,
+    String? securityAnswerHash,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     final existing = await getUserByEmail(normalizedEmail);
@@ -289,6 +309,8 @@ class DatabaseHelper {
       'businessName': businessName ?? '',
       'phone': phone ?? '',
       'dateCreated': DateTime.now().toIso8601String(),
+      'securityQuestion': securityQuestion ?? '',
+      'securityAnswerHash': securityAnswerHash ?? '',
     };
 
     if (kIsWeb) {
@@ -358,6 +380,65 @@ class DatabaseHelper {
         where: 'email = ?',
         whereArgs: [normalizedEmail],
       );
+    }
+  }
+
+  /// Returns the stored security question for [email], or null if the
+  /// user doesn't exist or never set one (e.g. registered before this
+  /// feature was added).
+  Future<String?> getSecurityQuestion(String email) async {
+    final user = await getUserByEmail(email);
+    final question = user?['securityQuestion'] as String?;
+    if (question == null || question.isEmpty) return null;
+    return question;
+  }
+
+  /// Compares [answerHash] against the stored hash for [email].
+  Future<bool> verifySecurityAnswer(String email, String answerHash) async {
+    final user = await getUserByEmail(email);
+    if (user == null) return false;
+    final storedHash = user['securityAnswerHash'] as String?;
+    if (storedHash == null || storedHash.isEmpty) return false;
+    return storedHash == answerHash;
+  }
+
+  /// Overwrites the password hash for [email]. Used by both the
+  /// self-service (security question) and admin-override reset flows.
+  Future<bool> resetPassword({
+    required String email,
+    required String newPasswordHash,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final existing = await getUserByEmail(normalizedEmail);
+    if (existing == null) return false;
+
+    if (kIsWeb) {
+      final updated = {...existing, 'passwordHash': newPasswordHash};
+      await _usersStore
+          .record(normalizedEmail)
+          .put(await _web, updated.cast<String, Object?>());
+    } else {
+      final db = await _mobile;
+      await db.update(
+        'users',
+        {'passwordHash': newPasswordHash},
+        where: 'email = ?',
+        whereArgs: [normalizedEmail],
+      );
+    }
+    return true;
+  }
+
+  /// Returns all registered users — used by the admin override screen so a
+  /// Merchant can look up any account by email without needing their
+  /// security answer.
+  Future<List<Map<String, dynamic>>> getAllUsers() async {
+    if (kIsWeb) {
+      final snapshots = await _usersStore.find(await _web);
+      return snapshots.map((s) => Map<String, dynamic>.from(s.value)).toList();
+    } else {
+      final db = await _mobile;
+      return db.query('users', orderBy: 'fullName ASC');
     }
   }
 }

@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 // Central API keys + minimal global app state used by screens.
 // Replace placeholder values with your real app settings as needed.
 
@@ -43,3 +45,11 @@ Map<String, dynamic>? currentUserSession;
 void clearCurrentUserSession() {
   currentUserSession = null;
 }
+
+/// Global theme mode notifier — screens can flip this to switch the whole
+/// app between light and dark instantly. main.dart listens to it via a
+/// ValueListenableBuilder. Persisted to SharedPreferences separately by
+/// whichever screen changes it (see ProfileScreen).
+final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
+  ThemeMode.dark,
+);

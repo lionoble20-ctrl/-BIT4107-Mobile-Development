@@ -73,4 +73,15 @@ class PaymentService {
 
     return 'TIMEOUT';
   }
+
+  /// Simulates a completed M-Pesa payment with no network call at all —
+  /// use this for demos/testing so real money is never touched, while
+  /// still letting sales/profit/monitoring be exercised end-to-end.
+  static Future<String> simulateMpesaPayment({
+    required String phoneNumber,
+    required double amount,
+  }) async {
+    await Future.delayed(const Duration(seconds: 2)); // mimic STK prompt delay
+    return 'COMPLETE';
+  }
 }
