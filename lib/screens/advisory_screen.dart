@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/inventory_item.dart';
 import '../services/world_bank_service.dart'; // NEW
+import 'ai_assistant_screen.dart'; // NEW
 
 class PredictiveAdvisoryScreen extends StatefulWidget {
   const PredictiveAdvisoryScreen({super.key});
@@ -50,7 +51,24 @@ class _PredictiveAdvisoryScreenState extends State<PredictiveAdvisoryScreen> {
     final suggestions = generateAdvisory();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Intelligent Advisory Engine')),
+      appBar: AppBar(
+        title: const Text('Intelligent Advisory Engine'),
+        actions: [
+          // NEW - Business Assistant entry point
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline),
+            tooltip: 'Business Assistant',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AiAssistantScreen(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
