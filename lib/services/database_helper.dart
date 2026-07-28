@@ -347,6 +347,13 @@ class DatabaseHelper {
     }
   }
 
+  /// Updates a user's profile fields.
+  ///
+  /// Performance note (Week 13): on mobile this previously did a full
+  /// read of the user row, merged the new values in Dart, then wrote the
+  /// whole row back — two round trips for what is usually a one or two
+  /// field change. It now issues a single targeted UPDATE containing only
+  /// the fields that were actually passed in, removing the read entirely.
   Future<void> updateUser({
     required String email,
     required String fullName,
@@ -354,17 +361,18 @@ class DatabaseHelper {
     String? phone,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
-    final existing = await getUserByEmail(normalizedEmail);
-    if (existing == null) return;
-
-    final updated = {
-      ...existing,
-      'fullName': fullName,
-      'businessName': businessName ?? existing['businessName'],
-      'phone': phone ?? existing['phone'],
-    };
 
     if (kIsWeb) {
+      final existing = await getUserByEmail(normalizedEmail);
+      if (existing == null) return;
+
+      final updated = {
+        ...existing,
+        'fullName': fullName,
+        'businessName': businessName ?? existing['businessName'],
+        'phone': phone ?? existing['phone'],
+      };
+
       await _usersStore
           .record(normalizedEmail)
           .put(await _web, updated.cast<String, Object?>());
@@ -373,9 +381,9 @@ class DatabaseHelper {
       await db.update(
         'users',
         {
-          'fullName': updated['fullName'],
-          'businessName': updated['businessName'],
-          'phone': updated['phone'],
+          'fullName': fullName,
+          if (businessName != null) 'businessName': businessName,
+          if (phone != null) 'phone': phone,
         },
         where: 'email = ?',
         whereArgs: [normalizedEmail],
